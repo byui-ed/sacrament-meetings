@@ -1,19 +1,27 @@
 import { redirect } from 'next/navigation';
 import { getMeetings } from '@/lib/meetings-db';
+import { connection } from 'next/server';
 
-export default function CurrentMeetingPage() {
+export default async function CurrentMeetingPage() {
+  // Opt into dynamic rendering safely without conflicting with cacheComponents
+  await connection();
+
   const today = new Date();
-  const dayOfWeek = today.getDay(); // 0 (Sun) to 6 (Sat)
+  const dayOfWeek = today.getDay(); // 0 (Sun) through 6 (Sat)
   const sunday = new Date(today);
-  sunday.setDate(today.getDate() - dayOfWeek);
+  sunday.setDate(today.getDate() - dayOfWeek); // roll back to Sunday
 
-  const formattedSunday = sunday.toISOString().split('T')[0];
-  const meetings = getMeetings(formattedSunday);
+  // Format as 'YYYY-MM-DD'
+  const formattedDate = sunday.toISOString().split('T')[0];
 
-  if (meetings.length > 0) {
-    redirect(`/meetings/${meetings[0].id}`);
+  // Query meetings for this Sunday
+  const meetings = getMeetings(formattedDate);
+  const currentMeeting = meetings.length > 0 ? meetings[0] : null;
+
+  if (currentMeeting) {
+    redirect(`/meetings/${currentMeeting.id}`);
+  } else {
+    // Fallback to meetings list if no meeting exists for today
+    redirect('/meetings');
   }
-
-  // Fallback to meetings overview if no meeting found for today's Sunday
-  redirect('/meetings');
 }
