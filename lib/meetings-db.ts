@@ -1,112 +1,152 @@
 import { neon } from '@neondatabase/serverless';
-import type { SacramentMeeting } from './types';
 
-const sql = neon(process.env.DATABASE_URL!);
+export interface HymnInfo {
+  number?: number | string;
+  title?: string;
+}
 
-const ITEMS_PER_PAGE = 5;
+export interface SpeakerInfo {
+  name?: string;
+  topic?: string;
+}
 
-export async function getMeetings(
-  query: string = '',
-  currentPage: number = 1
-): Promise<SacramentMeeting[]> {
-  try {
-    console.log("DATABASE_URL configured:", !!process.env.DATABASE_URL);
-    const searchTerm = `%${query}%`;
-    const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+export interface SacramentMeeting {
+  id: number;
+  date: string;
+  meetingType: string;
+  presiding: string;
+  conducting: string;
+  openingHymn?: HymnInfo | null;
+  openingPrayer?: string | null;
+  sacramentHymn?: HymnInfo | null;
+  closingHymn?: HymnInfo | null;
+  closingPrayer?: string | null;
+  wardBusiness?: unknown;
+  stakeBusiness?: unknown;
+  announcements?: unknown;
+  speakers?: SpeakerInfo[] | null;
+}
 
-    const rows = await sql`
-      SELECT
-        id,
-        to_char(date, 'YYYY-MM-DD') AS "date",
-        meeting_type                AS "meetingType",
-        presiding, conducting, announcements,
-        opening_hymn                AS "openingHymn",
-        opening_prayer              AS "openingPrayer",
-        ward_business               AS "wardBusiness",
-        stake_business              AS "stakeBusiness",
-        sacrament_hymn              AS "sacramentHymn",
-        speakers,
-        closing_hymn                AS "closingHymn",
-        closing_prayer              AS "closingPrayer"
-      FROM meetings
-      WHERE
-        presiding     ILIKE ${searchTerm}
-        OR conducting ILIKE ${searchTerm}
-        OR meeting_type ILIKE ${searchTerm}
-        OR speakers::text ILIKE ${searchTerm}
-      ORDER BY date DESC
-      LIMIT ${ITEMS_PER_PAGE} OFFSET ${offset}
-    `;
-    
-    console.log("Fetched rows from Neon in getMeetings:", rows);
-    return Array.isArray(rows) ? (rows as unknown as SacramentMeeting[]) : [];
-  } catch (error) {
-    console.error('DATABASE ERROR IN getMeetings:', error);
+function getSql() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error('DATABASE_URL environment variable is not set.');
+  }
+  return neon(connectionString);
+}
+
+export async function getMeetings(searchQuery = ''): Promise<SacramentMeeting[]> {
+  if (!process.env.DATABASE_URL) {
+    console.error('DATABASE_URL is missing in environment variables.');
     return [];
   }
-}
 
-export async function getMeetingsTotalPages(
-  query: string = ''
-): Promise<number> {
+  const sql = getSql();
+  const trimmed = searchQuery.trim();
+
   try {
-    const searchTerm = `%${query}%`;
+    if (!trimmed) {
+      const rows = await sql`
+        SELECT
+          id,
+          to_char(date, 'YYYY-MM-DD') AS "date",
+          meeting_type AS "meetingType",
+          presiding,
+          conducting,
+          opening_hymn AS "openingHymn",
+          opening_prayer AS "openingPrayer",
+          sacrament_hymn AS "sacramentHymn",
+          closing_hymn AS "closingHymn",
+          closing_prayer AS "closingPrayer",
+          ward_business AS "wardBusiness",
+          stake_business AS "stakeBusiness",
+          announcements,
+          speakers
+        FROM meetings
+        ORDER BY date DESC, id DESC
+      `;
+
+      return rows as SacramentMeeting[];
+    }
+
+    const pattern = `%${trimmed}%`;
     const rows = await sql`
-      SELECT COUNT(*) FROM meetings
+      SELECT
+        id,
+        to_char(date, 'YYYY-MM-DD') AS "date",
+        meeting_type AS "meetingType",
+        presiding,
+        conducting,
+        opening_hymn AS "openingHymn",
+        opening_prayer AS "openingPrayer",
+        sacrament_hymn AS "sacramentHymn",
+        closing_hymn AS "closingHymn",
+        closing_prayer AS "closingPrayer",
+        ward_business AS "wardBusiness",
+        stake_business AS "stakeBusiness",
+        announcements,
+        speakers
+      FROM meetings
       WHERE
-        presiding     ILIKE ${searchTerm}
-        OR conducting ILIKE ${searchTerm}
-        OR meeting_type ILIKE ${searchTerm}
-        OR speakers::text ILIKE ${searchTerm}
+        presiding ILIKE ${pattern}
+        OR conducting ILIKE ${pattern}
+        OR meeting_type ILIKE ${pattern}
+        OR COALESCE(opening_prayer, '') ILIKE ${pattern}
+        OR COALESCE(closing_prayer, '') ILIKE ${pattern}
+        OR to_char(date, 'YYYY-MM-DD') ILIKE ${pattern}
+      ORDER BY date DESC, id DESC
     `;
-    return Math.ceil(Number(rows?.[0]?.count ?? 0) / ITEMS_PER_PAGE);
+
+    return rows as SacramentMeeting[];
   } catch (error) {
-    console.error('DATABASE ERROR IN getMeetingsTotalPages:', error);
-    return 1;
+    const err = error as { message?: string; cause?: unknown };
+    console.error('Error connecting to database in getMeetings:', err.message, err.cause ?? '');
+    throw error;
   }
 }
 
-export async function getMeetingById(
-  id: number
-): Promise<SacramentMeeting | null> {
+export async function getMeetingById(id: number): Promise<SacramentMeeting | null> {
+  if (!Number.isInteger(id) || id <= 0) {
+    return null;
+  }
+
+  if (!process.env.DATABASE_URL) {
+    console.error('DATABASE_URL is missing in environment variables.');
+    return null;
+  }
+
+  const sql = getSql();
+
   try {
     const rows = await sql`
       SELECT
         id,
         to_char(date, 'YYYY-MM-DD') AS "date",
-        meeting_type                AS "meetingType",
-        presiding, conducting, announcements,
-        opening_hymn                AS "openingHymn",
-        opening_prayer              AS "openingPrayer",
-        ward_business               AS "wardBusiness",
-        stake_business              AS "stakeBusiness",
-        sacrament_hymn              AS "sacramentHymn",
-        speakers,
-        closing_hymn                AS "closingHymn",
-        closing_prayer              AS "closingPrayer"
-      FROM meetings WHERE id = ${id}
+        meeting_type AS "meetingType",
+        presiding,
+        conducting,
+        opening_hymn AS "openingHymn",
+        opening_prayer AS "openingPrayer",
+        sacrament_hymn AS "sacramentHymn",
+        closing_hymn AS "closingHymn",
+        closing_prayer AS "closingPrayer",
+        ward_business AS "wardBusiness",
+        stake_business AS "stakeBusiness",
+        announcements,
+        speakers
+      FROM meetings
+      WHERE id = ${id}
+      LIMIT 1
     `;
-    return (rows?.[0] as unknown as SacramentMeeting) ?? null;
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    return rows[0] as SacramentMeeting;
   } catch (error) {
-    console.error('DATABASE ERROR IN getMeetingById:', error);
-    return null;
+    const err = error as { message?: string; cause?: unknown };
+    console.error('Error connecting to database in getMeetingById:', err.message, err.cause ?? '');
+    throw error;
   }
-}
-
-// Mutation stubs — will be wired to the database in Week 04
-export async function addMeeting(
-  data: Omit<SacramentMeeting, 'id'>
-): Promise<SacramentMeeting> {
-  throw new Error('addMeeting: database implementation coming in Week 04');
-}
-
-export async function updateMeeting(
-  id: number,
-  updates: Partial<SacramentMeeting>
-): Promise<SacramentMeeting | null> {
-  throw new Error('updateMeeting: database implementation coming in Week 04');
-}
-
-export async function deleteMeeting(id: number): Promise<boolean> {
-  throw new Error('deleteMeeting: database implementation coming in Week 04');
 }

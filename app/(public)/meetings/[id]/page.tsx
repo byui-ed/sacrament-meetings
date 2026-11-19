@@ -7,6 +7,11 @@ interface MeetingDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
+interface SpeakerItem {
+  name?: string;
+  topic?: string;
+}
+
 function formatItem(item: unknown): string {
   if (typeof item === 'string') return item;
   if (item && typeof item === 'object') {
@@ -76,7 +81,7 @@ async function MeetingProgramDetail({
         <section className="space-y-2 pt-4 border-t border-slate-100 dark:border-slate-800">
           <h2 className="font-semibold text-slate-800 dark:text-slate-200">Announcements</h2>
           <ul className="list-disc list-inside space-y-1 text-sm text-slate-600 dark:text-slate-300">
-            {meeting.announcements.map((item, index) => (
+            {meeting.announcements.map((item: unknown, index: number) => (
               <li key={index}>{formatItem(item)}</li>
             ))}
           </ul>
@@ -98,14 +103,14 @@ async function MeetingProgramDetail({
               <li>
                 <strong>Ward Business:</strong>
                 <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
-                  {meeting.wardBusiness.map((item, index) => (
+                  {meeting.wardBusiness.map((item: unknown, index: number) => (
                     <li key={index}>{formatItem(item)}</li>
                   ))}
                 </ul>
               </li>
             )
           ) : (
-            meeting.wardBusiness && (
+            Boolean(meeting.wardBusiness) && (
               <li>
                 <strong>Ward Business:</strong> {formatItem(meeting.wardBusiness)}
               </li>
@@ -117,14 +122,14 @@ async function MeetingProgramDetail({
               <li>
                 <strong>Stake Business:</strong>
                 <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
-                  {meeting.stakeBusiness.map((item, index) => (
+                  {meeting.stakeBusiness.map((item: unknown, index: number) => (
                     <li key={index}>{formatItem(item)}</li>
                   ))}
                 </ul>
               </li>
             )
           ) : (
-            meeting.stakeBusiness && (
+            Boolean(meeting.stakeBusiness) && (
               <li>
                 <strong>Stake Business:</strong> {formatItem(meeting.stakeBusiness)}
               </li>
@@ -142,7 +147,7 @@ async function MeetingProgramDetail({
               Speakers
             </h3>
             <ul className="space-y-1.5 text-sm">
-              {meeting.speakers.map((speaker, index) => (
+              {meeting.speakers.map((speaker: SpeakerItem, index: number) => (
                 <li key={index}>
                   <strong>{speaker.name}</strong>
                   {speaker.topic ? ` — ${speaker.topic}` : ''}
